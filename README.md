@@ -1,5 +1,5 @@
-# laserscan\_to\ranges
-The laserscan\_to\ranges package offers simplification and intuitive representation of the LaserScan messages.
+# laserscan\_to\_ranges
+The laserscan\_to\_ranges package offers simplification and intuitive representation of the LaserScan messages.
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 # Overview
