@@ -20,6 +20,7 @@ The package has the following parameters:
   * `max`: the farthest distance in the sector
 * `field_of_view` (`double`, default: `0.0`) - specifies the field of view of the sensor in degrees. If the value is set to `0.0`, the field of view will be calculated from the `angle_min` and `angle_max` fields of the LaserScan message.
 * `angle_offset` (`double`, default: `0.0`) - specifies the angle offset in degrees. The offset is added to the angle_min and angle_max of the LaserScan messages. For example, if the sensors field of view is [-90, 90] degrees and the offset is 10 degrees, the 60 degree front sector will be shifted from [-30, 30] to [-20, 40].
+* `enable_ranges` (`bool`, default: `false`) - By default the node publish only SimpleRanges messages on the `simple_ranges` topic. Enable this parameter to additionally publish the [sensor_msgs/Range](https://docs.ros.org/en/api/sensor_msgs/html/msg/Range.html) messages on the `ranges_right`, `ranges_front`, and `ranges_left` topics. Transforms for each sector are also published. This option is useful for visualization the ranges in RViz.
 
 
 # Running

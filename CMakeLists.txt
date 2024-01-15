@@ -8,8 +8,12 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}_msg
@@ -24,7 +28,10 @@ add_executable(${PROJECT_NAME} src/laserscan_to_ranges.cpp)
 ament_target_dependencies(${PROJECT_NAME}
   "rclcpp"
   "sensor_msgs"
-  "std_msgs"
+  "geometry_msgs"
+  "tf2"
+  "tf2_ros"
+  "tf2_geometry_msgs"
 )
 
 # Link the generated interface library against the node target

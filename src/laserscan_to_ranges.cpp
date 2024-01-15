@@ -1,16 +1,18 @@
 #include "laserscan_to_ranges/laserscan_to_ranges.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include "tf2/LinearMath/Quaternion.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 
 LaserScanToRanges::LaserScanToRanges() : Node("laserscan_to_ranges")
 {
-  scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
-    "scan", 10, std::bind(&LaserScanToRanges::scanCallback, this, std::placeholders::_1));
-  range_pub_ = this->create_publisher<laserscan_to_ranges::msg::SimpleRanges>("ranges", 10);
-
   // Read in parameters
   this->declare_parameter("method", "min");
   this->declare_parameter("field_of_view", 0.0); // In degrees, 0.0 means use entire scan
   this->declare_parameter("angle_offset", 0.0);  // In degrees, positive is counter-clockwise
+  this->declare_parameter("enable_ranges", true); // Enable publishing the standard range messages
+  this->declare_parameter("range_frame_prefix", "range_"); // Prefix for the range sensor frame names
+  this->declare_parameter("base_frame", ""); // Base frame name, leave empty to use the scan frame
   std::string method = this->get_parameter("method").as_string();
   std::transform(method.begin(), method.end(), method.begin(), ::tolower);// make sure string is lowercase
   if (method == "min")
@@ -32,17 +34,35 @@ LaserScanToRanges::LaserScanToRanges() : Node("laserscan_to_ranges")
   // Read in the field of view and angle offset parameters and convert both to radians
   field_of_view_ = this->get_parameter("field_of_view").as_double() * M_PI / 180.0;
   angle_offset_ = this->get_parameter("angle_offset").as_double() * M_PI / 180.0;
+  enable_ranges_ = this->get_parameter("enable_ranges").as_bool();
+  range_frame_prefix_ = this->get_parameter("range_frame_prefix").as_string();
+  base_frame_ = this->get_parameter("base_frame").as_string();
+
+  // Set up the publishers and subscribers
+  scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
+    "scan", 10, std::bind(&LaserScanToRanges::scanCallback, this, std::placeholders::_1));
+  simple_range_pub_ = this->create_publisher<laserscan_to_ranges::msg::SimpleRanges>("simple_ranges", 10);
+  if (enable_ranges_)
+  {
+    // Initialize the range publisher and transform broadcaster
+    range_pub_right_ = this->create_publisher<sensor_msgs::msg::Range>("range_right", 10);
+    range_pub_front_ = this->create_publisher<sensor_msgs::msg::Range>("range_front", 10);
+    range_pub_left_ = this->create_publisher<sensor_msgs::msg::Range>("range_left", 10);
+    range_tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+  }
+
 }
 
 void LaserScanToRanges::scanCallback(const sensor_msgs::msg::LaserScan::SharedPtr msg)
 {
   RCLCPP_INFO(this->get_logger(),"scan msg received: '%s'", msg->header.frame_id.c_str());
 
-  auto ranges_msg = laserscan_to_ranges::msg::SimpleRanges();
-  ranges_msg.header = msg->header;
-  ranges_msg.right = 0;
-  ranges_msg.front = 0;
-  ranges_msg.left = 0;
+  auto simple_ranges_msg = laserscan_to_ranges::msg::SimpleRanges();
+  simple_ranges_msg.header = msg->header;
+  simple_ranges_msg.header.stamp = this->get_clock()->now(); // Use the current time for the header stamp
+  simple_ranges_msg.right = 0;
+  simple_ranges_msg.front = 0;
+  simple_ranges_msg.left = 0;
 
   double field_of_view = field_of_view_; // In radians
   
@@ -120,26 +140,88 @@ void LaserScanToRanges::scanCallback(const sensor_msgs::msg::LaserScan::SharedPt
   {
     case Method::MIN:
       // Find the minimum range for each sector, if the sector is empty set the range to infinity
-      ranges_msg.right = right_ranges.empty() ? std::numeric_limits<double>::infinity() : *std::min_element(right_ranges.begin(), right_ranges.end());
-      ranges_msg.front = front_ranges.empty() ? std::numeric_limits<double>::infinity() : *std::min_element(front_ranges.begin(), front_ranges.end());
-      ranges_msg.left = left_ranges.empty() ? std::numeric_limits<double>::infinity() : *std::min_element(left_ranges.begin(), left_ranges.end());
+      simple_ranges_msg.right = right_ranges.empty() ? std::numeric_limits<double>::infinity() : *std::min_element(right_ranges.begin(), right_ranges.end());
+      simple_ranges_msg.front = front_ranges.empty() ? std::numeric_limits<double>::infinity() : *std::min_element(front_ranges.begin(), front_ranges.end());
+      simple_ranges_msg.left = left_ranges.empty() ? std::numeric_limits<double>::infinity() : *std::min_element(left_ranges.begin(), left_ranges.end());
       break;
     case Method::MAX:
       // Find the maximum range for each sector, if the sector is empty set the range to 0
-      ranges_msg.right = right_ranges.empty() ? 0 : *std::max_element(right_ranges.begin(), right_ranges.end());
-      ranges_msg.front = front_ranges.empty() ? 0 : *std::max_element(front_ranges.begin(), front_ranges.end());
-      ranges_msg.left = left_ranges.empty() ? 0 : *std::max_element(left_ranges.begin(), left_ranges.end());
+      simple_ranges_msg.right = right_ranges.empty() ? 0 : *std::max_element(right_ranges.begin(), right_ranges.end());
+      simple_ranges_msg.front = front_ranges.empty() ? 0 : *std::max_element(front_ranges.begin(), front_ranges.end());
+      simple_ranges_msg.left = left_ranges.empty() ? 0 : *std::max_element(left_ranges.begin(), left_ranges.end());
       break;
     case Method::MEAN:
       // Find the mean range for each sector, if the sector is empty set the range to infinity
-      ranges_msg.right = right_ranges.empty() ? std::numeric_limits<double>::infinity() : std::accumulate(right_ranges.begin(), right_ranges.end(), 0.0) / right_ranges.size();
-      ranges_msg.front = front_ranges.empty() ? std::numeric_limits<double>::infinity() : std::accumulate(front_ranges.begin(), front_ranges.end(), 0.0) / front_ranges.size();
-      ranges_msg.left = left_ranges.empty() ? std::numeric_limits<double>::infinity() : std::accumulate(left_ranges.begin(), left_ranges.end(), 0.0) / left_ranges.size();
+      simple_ranges_msg.right = right_ranges.empty() ? std::numeric_limits<double>::infinity() : std::accumulate(right_ranges.begin(), right_ranges.end(), 0.0) / right_ranges.size();
+      simple_ranges_msg.front = front_ranges.empty() ? std::numeric_limits<double>::infinity() : std::accumulate(front_ranges.begin(), front_ranges.end(), 0.0) / front_ranges.size();
+      simple_ranges_msg.left = left_ranges.empty() ? std::numeric_limits<double>::infinity() : std::accumulate(left_ranges.begin(), left_ranges.end(), 0.0) / left_ranges.size();
       break;
   }
 
-  // Publish the ranges message
-  range_pub_->publish(ranges_msg);
+  RCLCPP_INFO(this->get_logger(), "right %f, front %f, left %f", simple_ranges_msg.right, simple_ranges_msg.front, simple_ranges_msg.left);
+
+  // Publish the SimpleRange message
+  simple_range_pub_->publish(simple_ranges_msg);
+
+  // Publish the standard range messages if enabled
+  if (enable_ranges_)
+  {
+    // Use the base frame if specified, otherwise use the scan frame
+    geometry_msgs::msg::TransformStamped range_tf_msg_;
+    if (base_frame_.empty())
+    {
+      range_tf_msg_.header.frame_id = msg->header.frame_id;
+    }
+    else
+    {
+      range_tf_msg_.header.frame_id = base_frame_;
+    }
+
+    // Create the range messages
+    auto range_msg = sensor_msgs::msg::Range();
+
+    // Fill in the common fields
+    range_msg.header = msg->header;
+    range_msg.header.stamp = this->get_clock()->now(); // Use the current time for the header stamp
+    range_msg.radiation_type = sensor_msgs::msg::Range::INFRARED;
+    range_msg.field_of_view = field_of_view / 3;
+    range_msg.min_range = msg->range_min;
+    range_msg.max_range = msg->range_max;
+
+    // Publish the right sector
+    range_msg.header.frame_id = range_frame_prefix_ + "right";
+    range_msg.range = simple_ranges_msg.right;
+    range_pub_right_->publish(range_msg);
+
+    // Publish the front sector
+    range_msg.header.frame_id = range_frame_prefix_ + "front";
+    range_msg.range = simple_ranges_msg.front;
+    range_pub_front_->publish(range_msg);
+
+    // Publish the left sector
+    range_msg.header.frame_id = range_frame_prefix_ + "left";
+    range_msg.range = simple_ranges_msg.left;
+    range_pub_left_->publish(range_msg);
+
+    // Prepare the transform messages
+    tf2::Quaternion q;
+
+    range_tf_msg_.header.stamp = msg->header.stamp;
+    range_tf_msg_.child_frame_id = range_frame_prefix_ + "right";
+    q = tf2::Quaternion(tf2::Vector3(0, 0, 1), -field_of_view / 3);
+    range_tf_msg_.transform.rotation = tf2::toMsg(q);
+    range_tf_broadcaster_->sendTransform(range_tf_msg_);
+
+    range_tf_msg_.child_frame_id = range_frame_prefix_ + "front";
+    q = tf2::Quaternion(tf2::Vector3(0, 0, 1), 0);
+    range_tf_msg_.transform.rotation = tf2::toMsg(q);
+    range_tf_broadcaster_->sendTransform(range_tf_msg_);
+
+    range_tf_msg_.child_frame_id = range_frame_prefix_ + "left";
+    q = tf2::Quaternion(tf2::Vector3(0, 0, 1), field_of_view / 3);
+    range_tf_msg_.transform.rotation = tf2::toMsg(q);
+    range_tf_broadcaster_->sendTransform(range_tf_msg_);
+  }
 }
 
 int main(int argc, char **argv)
