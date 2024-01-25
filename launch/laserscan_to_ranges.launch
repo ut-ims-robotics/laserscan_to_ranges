@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="scan_topic" default="/scan"/>
+  <arg name="range_topic" default="~/simple_ranges"/>
+  <arg name="range_frame_prefix" default="ranges_"/>
+  <arg name="base_frame" default="base_link"/>
+  <arg name="method" default="min"/>
+  <arg name="field_of_view" default="90.0"/>
+  <arg name="angle_offset" default="45.0"/>
+  <arg name="enable_ranges" default="true"/>
+  <arg name="debug" default="false"/>
+
+  <node pkg="laserscan_to_ranges" type="laserscan_to_ranges" name="laserscan_to_ranges" output="screen">
+    <param name="range_frame_prefix" value="$(arg range_frame_prefix)"/>
+    <param name="base_frame" value="$(arg base_frame)"/>
+    <param name="method" value="$(arg method)"/>
+    <param name="field_of_view" value="$(arg field_of_view)"/>
+    <param name="angle_offset" value="$(arg angle_offset)"/>
+    <param name="enable_ranges" value="$(arg enable_ranges)"/>
+    <param name="debug" value="$(arg debug)"/>
+
+    <remap from="~/scan" to="$(arg range_topic)"/>
+    <remap from="~/simple_ranges" to="$(arg range_topic)"/>
+  </node>
+</launch>
