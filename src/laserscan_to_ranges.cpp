@@ -13,6 +13,8 @@ LaserScanToRanges::LaserScanToRanges() : Node("laserscan_to_ranges")
   this->declare_parameter("enable_ranges", true); // Enable publishing the standard range messages
   this->declare_parameter("range_frame_prefix", "range_"); // Prefix for the range sensor frame names
   this->declare_parameter("base_frame", ""); // Base frame name, leave empty to use the scan frame
+  this->declare_parameter("debug", false); // Set node log level to debug
+
   std::string method = this->get_parameter("method").as_string();
   std::transform(method.begin(), method.end(), method.begin(), ::tolower);// make sure string is lowercase
   if (method == "min")
@@ -51,11 +53,13 @@ LaserScanToRanges::LaserScanToRanges() : Node("laserscan_to_ranges")
     range_tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
   }
 
+  RCLCPP_INFO(this->get_logger(),"laserscan_to_ranges node started");
+  RCLCPP_DEBUG(this->get_logger(),"debugging turned on");
 }
 
 void LaserScanToRanges::scanCallback(const sensor_msgs::msg::LaserScan::SharedPtr msg)
 {
-  RCLCPP_INFO(this->get_logger(),"scan msg received: '%s'", msg->header.frame_id.c_str());
+  RCLCPP_DEBUG(this->get_logger(),"scan msg received: '%s'", msg->header.frame_id.c_str());
 
   auto simple_ranges_msg = laserscan_to_ranges::msg::SimpleRanges();
   simple_ranges_msg.header = msg->header;
@@ -95,7 +99,7 @@ void LaserScanToRanges::scanCallback(const sensor_msgs::msg::LaserScan::SharedPt
   }
   
   // Calculate the center index of the scan
-  unsigned int center_idx = msg->ranges.size()/2;
+  unsigned int center_idx = msg->ranges.size() / 2;
   
   // Take into account the angle offset by shifting the center index
   center_idx += angle_offset_/msg->angle_increment;
@@ -123,7 +127,6 @@ void LaserScanToRanges::scanCallback(const sensor_msgs::msg::LaserScan::SharedPt
   
   // Calculate the range for each sector depending on the method
   
-  
   // Copy the ranges for each sector into the vectors
   std::vector<double> right_ranges(msg->ranges.begin() + right_start_idx, msg->ranges.begin() + right_end_idx);
   std::vector<double> front_ranges(msg->ranges.begin() + front_start_idx, msg->ranges.begin() + front_end_idx);
@@ -134,7 +137,7 @@ void LaserScanToRanges::scanCallback(const sensor_msgs::msg::LaserScan::SharedPt
   front_ranges.erase(std::remove_if(front_ranges.begin(), front_ranges.end(), [](double d){return std::isnan(d);}), front_ranges.end());
   left_ranges.erase(std::remove_if(left_ranges.begin(), left_ranges.end(), [](double d){return std::isnan(d);}), left_ranges.end());
 
-  RCLCPP_INFO(this->get_logger(), "right %ld, front %ld, left %ld", right_ranges.size(), front_ranges.size(), left_ranges.size());
+  RCLCPP_DEBUG(this->get_logger(), "Points per sector: right %ld, front %ld, left %ld]", right_ranges.size(), front_ranges.size(), left_ranges.size());
 
   switch (method_)
   {
@@ -158,7 +161,7 @@ void LaserScanToRanges::scanCallback(const sensor_msgs::msg::LaserScan::SharedPt
       break;
   }
 
-  RCLCPP_INFO(this->get_logger(), "right %f, front %f, left %f", simple_ranges_msg.right, simple_ranges_msg.front, simple_ranges_msg.left);
+  RCLCPP_DEBUG(this->get_logger(), "Sector values: right %f, front %f, left %f", simple_ranges_msg.right, simple_ranges_msg.front, simple_ranges_msg.left);
 
   // Publish the SimpleRange message
   simple_range_pub_->publish(simple_ranges_msg);
