@@ -19,7 +19,7 @@
     <param name="enable_ranges" value="$(arg enable_ranges)"/>
     <param name="debug" value="$(arg debug)"/>
 
-    <remap from="~/scan" to="$(arg range_topic)"/>
+    <remap from="~/scan" to="$(arg scan_topic)"/>
     <remap from="~/simple_ranges" to="$(arg range_topic)"/>
   </node>
 </launch>
