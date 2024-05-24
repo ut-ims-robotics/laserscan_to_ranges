@@ -5,8 +5,8 @@
   <arg name="range_frame_prefix" default="ranges_"/>
   <arg name="base_frame" default="base_link"/>
   <arg name="method" default="min"/>
-  <arg name="field_of_view" default="90.0"/>
-  <arg name="angle_offset" default="45.0"/>
+  <arg name="field_of_view" default="0.0"/>
+  <arg name="angle_offset" default="0.0"/>
   <arg name="enable_ranges" default="true"/>
   <arg name="debug" default="false"/>
 

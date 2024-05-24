@@ -19,6 +19,10 @@ LaserScanToRanges::LaserScanToRanges(): pnh_("~")
   pnh_.param<std::string>("base_frame", base_frame_, ""); // Base frame name, leave empty to use the scan frame
   pnh_.param<bool>("debug", debug, false); // Set node log level to debug
 
+  // Convert the field of view and angle offset from degrees to radians
+  field_of_view_ *= M_PI / 180;
+  angle_offset_ *= M_PI / 180;
+
   if (debug)
   {
     ROS_INFO("Setting log level to debug");
@@ -119,6 +123,10 @@ void LaserScanToRanges::scanCallback(const sensor_msgs::LaserScan::ConstPtr &msg
   auto front_end_idx = front_start_idx + points_per_sector - 1;
   auto left_end_idx = left_start_idx + points_per_sector - 1;
 
+  ROS_DEBUG("Center index: %d, Points per sector: %d", center_idx, points_per_sector);
+  ROS_DEBUG("Sector indices: right [%d, %d], front [%d, %d], left [%d, %d]", right_start_idx, right_end_idx, front_start_idx, front_end_idx, left_start_idx, left_end_idx);
+
+
   // Make sure indices are within scan data bounds
   unsigned int scan_len = msg->ranges.size();
   right_start_idx = std::max(std::min(right_start_idx, scan_len - 1), 0u);
@@ -127,6 +135,8 @@ void LaserScanToRanges::scanCallback(const sensor_msgs::LaserScan::ConstPtr &msg
   right_end_idx = std::max(std::min(right_end_idx, scan_len - 1), 0u);
   front_end_idx = std::max(std::min(front_end_idx, scan_len - 1), 0u);
   left_end_idx = std::max(std::min(left_end_idx, scan_len - 1), 0u);
+
+  ROS_DEBUG("Scan length: %d", scan_len);
 
   // Calculate the range for each sector depending on the method
 
@@ -172,9 +182,6 @@ void LaserScanToRanges::scanCallback(const sensor_msgs::LaserScan::ConstPtr &msg
   // Publish the standard range messages if enabled
   if (enable_ranges_)
   {
-    // Use the base frame if specified, otherwise use the scan frame
-    std::string range_frame_id = base_frame_.empty() ? msg->header.frame_id : base_frame_;
-
     // Create the range messages
     sensor_msgs::Range range_msg;
 
@@ -187,29 +194,29 @@ void LaserScanToRanges::scanCallback(const sensor_msgs::LaserScan::ConstPtr &msg
     range_msg.max_range = msg->range_max;
 
     // Publish the right sector
-    range_msg.header.frame_id = range_frame_id + range_frame_prefix_ + "right";
+    range_msg.header.frame_id = range_frame_prefix_ + "right";
     range_msg.range = simple_ranges_msg.right;
     range_pub_right_.publish(range_msg);
 
     // Publish the front sector
-    range_msg.header.frame_id = range_frame_id + range_frame_prefix_ + "front";
+    range_msg.header.frame_id = range_frame_prefix_ + "front";
     range_msg.range = simple_ranges_msg.front;
     range_pub_front_.publish(range_msg);
 
     // Publish the left sector
-    range_msg.header.frame_id = range_frame_id + range_frame_prefix_ + "left";
+    range_msg.header.frame_id = range_frame_prefix_ + "left";
     range_msg.range = simple_ranges_msg.left;
     range_pub_left_.publish(range_msg);
 
-    // Publish the range sensor transforms
-    
-    // Use the base frame if specified, otherwise use the scan frame
-    std::string range_tf_frame_id = base_frame_.empty() ? msg->header.frame_id : base_frame_;
-    
+
+
+    // Publish the range sensor transforms    
     tf2::Quaternion q;
     geometry_msgs::TransformStamped range_tf_msg;
-    range_tf_msg.header.stamp = ros::Time::now();
-    range_tf_msg.header.frame_id = range_tf_frame_id;
+    
+    // Use the base frame if specified, otherwise use the scan frame
+    range_tf_msg.header.frame_id = base_frame_.empty() ? msg->header.frame_id : base_frame_;
+    range_tf_msg.header.stamp = msg->header.stamp;
 
     // Publish the right sector transform
     range_tf_msg.child_frame_id = range_frame_prefix_ + "right";
