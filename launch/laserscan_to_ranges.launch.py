@@ -1,10 +1,9 @@
 from launch import LaunchDescription
-from launch_ros.actions import Node
+from launch_ros.actions import Node, PushROSNamespace
 from launch.substitutions import LaunchConfiguration
 from launch.actions import DeclareLaunchArgument
 
 def generate_launch_description():
-  ld = LaunchDescription()
 
   # Declare the launch arguments
   method_arg = DeclareLaunchArgument(
@@ -42,6 +41,7 @@ def generate_launch_description():
     package='laserscan_to_ranges',
     executable='laserscan_to_ranges',
     name='laserscan_to_ranges_node',
+    namespace=LaunchConfiguration('namespace'),
     output='screen',
     parameters=[
       {'method': LaunchConfiguration('method')},
@@ -53,6 +53,7 @@ def generate_launch_description():
   )
 
   # Add the actions to the launch description
+  ld = LaunchDescription()
   ld.add_action(method_arg)
   ld.add_action(field_of_view_arg)
   ld.add_action(angle_offset_arg)
